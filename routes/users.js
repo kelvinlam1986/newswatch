@@ -263,70 +263,117 @@ async.eachSeries(
   }
 );
 
-// // validate the body
-// var schema = {
-//   contentSnippet: joi
-//     .string()
-//     .max(200)
-//     .required(),
-//   date: joi.date().required(),
-//   hours: joi.string().max(20),
-//   imageUrl: joi
-//     .string()
-//     .max(300)
-//     .required(),
-//   keep: joi.bool().required(),
-//   link: joi
-//     .string()
-//     .max(300)
-//     .required(),
-//   source: joi
-//     .string()
-//     .max(50)
-//     .required(),
-//   storyID: joi
-//     .string()
-//     .max(100)
-//     .required(),
-//   title: joi
-//     .string()
-//     .max(200)
-//     .required()
-// };
+router.post("/:id/savedstories", authHelper.checkAuth, function(
+  req,
+  res,
+  next
+) {
+  // Verify that the id to delete is the same as in the auth token
+  if (req.params.id !== req.auth.userId) {
+    return next(new Error("Invalid request for saving stories"));
+  }
 
-// joi.validate(req.body, schema, function (err) {
-//   if (err) {
-//     return next(err);
-//   }
-// });
+  // validate the body
+  var schema = {
+    contentSnippet: joi
+      .string()
+      .max(200)
+      .required(),
+    date: joi.date().required(),
+    hours: joi.string().max(20),
+    imageUrl: joi
+      .string()
+      .max(300)
+      .required(),
+    keep: joi.bool().required(),
+    link: joi
+      .string()
+      .max(300)
+      .required(),
+    source: joi
+      .string()
+      .max(50)
+      .required(),
+    storyID: joi
+      .string()
+      .max(100)
+      .required(),
+    title: joi
+      .string()
+      .max(200)
+      .required()
+  };
 
-// // make sure
-// // A. Story is not already in there
-// // B. We limit the number of saved stories to 30
-// req.db.collection.findOneAndUpdate(
-//   {
-//     type: "USER_TYPE",
-//     _id: ObjectId(req.auth.userId)
-//   },
-//   {
-//     $addToSet: { savedStories: req.body }
-//   },
-//   {
-//     returnOriginal: true
-//   },
-//   (err, result) => {
-//     if (result && result.value === null) {
-//       return next(new Error("Over the save limit, or story already saved"));
-//     } else if (err) {
-//       console.log("+++POSSIBLE	CONTENTION	ERROR?+++	err:", err);
-//       return next(err);
-//     } else if (result.ok != 1) {
-//       console.log("+++POSSIBLE	CONTENTION	ERROR?+++	result:", result);
-//       return next(new Error("Story save failured"));
-//     }
+  joi.validate(req.body, schema, function(err) {
+    if (err) {
+      return next(err);
+    }
+  });
 
-//     return res.status(200).json(result.value);
-//   }
-// );
+  // make sure
+  // A. Story is not already in there
+  // B. We limit the number of saved stories to 30
+  req.db.collection.findOneAndUpdate(
+    {
+      type: "USER_TYPE",
+      _id: ObjectId(req.auth.userId)
+    },
+    {
+      $addToSet: { savedStories: req.body }
+    },
+    {
+      returnOriginal: true
+    },
+    (err, result) => {
+      if (result && result.value === null) {
+        return next(new Error("Over the save limit, or story already saved"));
+      } else if (err) {
+        console.log("+++POSSIBLE	CONTENTION	ERROR?+++	err:", err);
+        return next(err);
+      } else if (result.ok != 1) {
+        console.log("+++POSSIBLE	CONTENTION	ERROR?+++	result:", result);
+        return next(new Error("Story save failured"));
+      }
+
+      return res.status(200).json(result.value);
+    }
+  );
+});
+
+router.delete("/:id/savedstories/:sid", authHelper.checkAuth, function(
+  req,
+  res,
+  next
+) {
+  if (req.params.id !== req.auth.userId) {
+    return next(new Error("Invalid request for deletion story"));
+  }
+
+  req.db.collection.findOneAndUpdate(
+    {
+      type: "USER_TYPE",
+      _id: ObjectId(req.auth.userId)
+    },
+    {
+      $pull: {
+        savedStories: { storyID: req.params.sid }
+      }
+    },
+    {
+      returnOriginal: true
+    },
+    function(err, result) {
+      if (err) {
+        console.log("+++POSSIBLE CONTENTION ERROR?+++	err:", err);
+        return next(err);
+      } else if (result.ok !== 1) {
+        console.log("+++POSSIBLE CONTENTION ERROR?+++ result:", result);
+        return next(new Error("Story delete failure"));
+      }
+
+      return res.status(200).json(result.value);
+    }
+  );
+});
 
 module.exports = router;
