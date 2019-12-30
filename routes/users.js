@@ -181,87 +181,86 @@ router.put("/:id", authHelper.checkAuth, function(req, res, next) {
         ].trim();
       }
     }
-  }
+    // validate the newsFilter
+    var schema = {
+      name: joi
+        .string()
+        .min(1)
+        .max(30)
+        .regex(/^[-_	a-zA-Z0-9]+$/)
+        .required(),
+      keyWords: joi
+        .array()
+        .max(10)
+        .items(joi.string().max(20))
+        .required(),
+      enableAlert: joi.bool(),
+      alertFrequency: joi.number().min(0),
+      enableAutoDelete: joi.bool(),
+      deleteTime: joi.date(),
+      timeOfLastScan: joi.date(),
+      newsStories: joi.array(),
+      keywordsStr: joi
+        .string()
+        .min(1)
+        .max(100)
+    };
 
-  // validate the newsFilter
-  var schema = {
-    name: joi
-      .string()
-      .min(1)
-      .max(30)
-      .regex(/^[-_	a-zA-Z0-9]+$/)
-      .required(),
-    keyWords: joi
-      .array()
-      .max(10)
-      .items(joi.string().max(20))
-      .required(),
-    enableAlert: joi.bool(),
-    alertFrequency: joi.number().min(0),
-    enableAutoDelete: joi.bool(),
-    deleteTime: joi.date(),
-    timeOfLastScan: joi.date(),
-    newsStories: joi.array(),
-    keywordsStr: joi
-      .string()
-      .min(1)
-      .max(100)
-  };
-});
-
-async.eachSeries(
-  req.body.newsFilters,
-  function(filter, innercallback) {
-    joi.validate(filter, schema, function(err) {
-      innercallback(err);
-    });
-  },
-  function(err) {
-    if (err) {
-      return next(err);
-    } else {
-      // MongoDB implements optimistic concurrency for us.
-      // We were not holding on to the document anyway, so we just do a
-      // quick read and replace of just those properties and not the
-      // complete document.
-      // It matters if news stories were updated in the mean time (i.e.
-      // user sat there taking their time updating their news profile)
-      // because we will force that to update as part of this operation.
-      // We need the {returnOriginal: false}, so a test could verify what
-      // happened, otherwise the default is to return the original.
-      req.db.collection.findOneAndUpdate(
-        {
-          type: "USER_TYPE",
-          _id: ObjectId(req.auth.userId)
-        },
-        {
-          $set: {
-            settings: {
-              requirWifi: req.body.requirWifi,
-              enableAlert: req.body.enableAlert,
-              newsFilters: req.body.newsFilters
+    async.eachSeries(
+      req.body.newsFilters,
+      function(filter, innercallback) {
+        joi.validate(filter, schema, function(err) {
+          innercallback(err);
+        });
+      },
+      function(err) {
+        if (err) {
+          return next(err);
+        } else {
+          // MongoDB implements optimistic concurrency for us.
+          // We were not holding on to the document anyway, so we just do a
+          // quick read and replace of just those properties and not the
+          // complete document.
+          // It matters if news stories were updated in the mean time (i.e.
+          // user sat there taking their time updating their news profile)
+          // because we will force that to update as part of this operation.
+          // We need the {returnOriginal: false}, so a test could verify what
+          // happened, otherwise the default is to return the original.
+          req.db.collection.findOneAndUpdate(
+            {
+              type: "USER_TYPE",
+              _id: ObjectId(req.auth.userId)
+            },
+            {
+              $set: {
+                settings: {
+                  requirWifi: req.body.requirWifi,
+                  enableAlert: req.body.enableAlert,
+                  newsFilters: req.body.newsFilters
+                }
+              }
+            },
+            {
+              returnOriginal: false
+            },
+            function(err, result) {
+              if (err) {
+                console.log("+++POSSIBLE	CONTENTION	ERROR?+++	err:", err);
+                return next(err);
+              } else if (result.ok != 1) {
+                console.log("+++POSSIBLE	CONTENTION	ERROR?+++	result:", result);
+                return next(new Error("Error PUT failured !"));
+              } else {
+                req.node2.send({ msg: "REFRESH_STORIES", doc: result.value });
+                res.status(200).json(result.value);
+              }
             }
-          }
-        },
-        {
-          returnOriginal: false
-        },
-        function(err, result) {
-          if (err) {
-            console.log("+++POSSIBLE	CONTENTION	ERROR?+++	err:", err);
-            return next(err);
-          } else if (result.ok != 1) {
-            console.log("+++POSSIBLE	CONTENTION	ERROR?+++	result:", result);
-            return next(new Error("Error PUT failured !"));
-          } else {
-            req.node2.send({ msg: "REFRESH_STORIES", doc: result.value });
-            res.status(200).json(result.value);
-          }
+          );
         }
-      );
-    }
+      }
+    );
   }
-);
+});
 
 router.post("/:id/savedstories", authHelper.checkAuth, function(
   req,
