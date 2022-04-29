@@ -12,7 +12,7 @@
     "email": "kelvincoder@gmail.com"
   },
   "dependencies": {
-    "async": "^2.6.0",
+    "async": "^2.6.4",
     "body-parser": "^1.18.2",
     "dotenv": "^4.0.0",
     "express": "^4.13.4",
